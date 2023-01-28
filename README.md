@@ -7,4 +7,4 @@ Data was taken from Open FEMA Datasets; Disaster Declaration Summaries: https://
 
 I also used a previously created CSV logging all U.S. counties and their FIPS codes to join to the FEMA data, to more easily identify the location of certain flood disaster events. 
 
-The RMD file in this repository includes integrity checks 
+The RMD file in this repository includes integrity checks and questions for analysis. For this project, I used Tableau for mapping, as it worked better for the newsroom and other reporters collaborating on the project. The Tableau workbook is also included in this repository.
