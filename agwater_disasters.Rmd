@@ -1,0 +1,214 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+disasters <- read_csv("~/Documents/Ag & Water/Disaster Declarations/DisasterDeclarationsSummaries.csv") 
+fipscodes <- read_csv("~/Documents/county_fips.csv")
+
+#Make sure we have a clean county name for each record
+disasters <- disasters %>% 
+  mutate(fips = as.numeric(paste0(fipsStateCode, fipsCountyCode)))
+
+disasters <- disasters %>% 
+  left_join(x = disasters, y = fipscodes, by = "fips", all = T) %>% 
+  select(-c(state_name, long_name, sumlev, region, division, state.y, county, crosswalk, division_name))
+
+#Clean year for sorting
+disasters <- disasters %>% 
+  mutate(clean_year = year(declarationDate))
+
+```
+
+```{r}
+#Integrity checks
+
+disasters %>% count(county_name) #1879 counties named
+disasters %>% filter(is.na(county_name)) #These all seem to be reservations, which makes sense
+#I thought counties weren't available for the whole dataset?
+
+disasters %>% summary(declarationDate) #Dates range from 1953-2022
+
+disasters %>% count(disasterNumber) #4700 disasters
+disasters %>% count(declarationTitle) #only 2230 - I thought these should match?
+disasters %>% select(disasterNumber, declarationTitle)
+disasters %>% count(disasterNumber, declarationTitle) #this explains: some do not have special titles. So always group by disasterNumber.
+
+disasters %>% count(designatedArea) #2952
+
+disasters %>% count(state.x) #59 -- some typos?
+disasters %>% count(state_abbr) #52 -- this makes more sense
+disasters %>% filter(state.x == "AS") %>% select(state.x, fips, designatedArea, county_name, state_abbr) #state.x includes more territories. Shouldn't be a problem
+
+disasters %>% count(state.x, state_abbr) #A lot of states didn't match up with abbr when they should have?
+disasters %>% filter(state.x == "AR" & is.na(state_abbr)) #Appears to be statewide designations and cities -- ones that won't have county codes marked
+
+disasters %>% count(incidentType) #23 types of incidents, including biological and chemical disasters -- not all storms
+disasters %>% count(declarationType) #only 3 declaration types
+disasters %>% count(incidentType, declarationTitle, declarationType)
+
+```
+```{r}
+#Use only data after 1966 to be consistent with past projects
+disasters <- disasters %>% 
+  filter(clean_year > 1966)
+
+```
+
+```{r}
+#How many disasters have been declared in each county? Exclude COVID.
+county_disasters <- disasters %>% 
+  filter(!grepl("COVID", declarationTitle)) %>% 
+  count(county_name, state_abbr) 
+
+county_disasters <- county_disasters %>% 
+  mutate(location = paste0(county_name, ", ", state_abbr)) %>% 
+  rename(num_disasters = "n")
+```
+
+
+```{r}
+#How many flood-related disasters have been declared in each county?
+county_floods <- disasters %>% 
+  filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>% 
+  count(county_name, state_abbr)
+
+county_floods <- county_floods %>% 
+  mutate(location = paste0(county_name, ", ", state_abbr)) %>% 
+  rename(num_floods = "n")
+
+#Checks - which county has had the most floods?
+county_floods %>% arrange(desc(num_floods)) #2046 NAs
+
+#The NAs are all reservations
+disasters %>% 
+  filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>% 
+  filter(is.na(county_name) & is.na(state_abbr))
+
+```
+
+```{r}
+#Same as above but by year
+floods_by_county_per_year <- disasters %>% 
+filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>%   filter(!is.na(county_name)) %>% 
+  count(clean_year, county_name, state_abbr) %>% 
+  arrange(desc(n))
+```
+
+```{r}
+#Test out the above: There should be 9 different flood events for Abbeville Co, SC
+disasters %>% 
+  filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>% 
+  filter(county_name == "Abbeville County" & state_abbr == "SC") 
+
+```
+
+
+```{r}
+#How many unique disaster events in each state each year? Excluding COVID
+disaster_state_group <- disasters %>% 
+  filter(!grepl("COVID", declarationTitle)) %>% 
+  count(disasterNumber, state.x) 
+
+disaster_events <- disaster_state_group %>% count(state.x)
+```
+
+```{r}
+#How many flood-related disaster events per state?
+floods_state_group <- disasters %>% 
+  filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>%
+  count(disasterNumber, state.x) 
+
+flood_events <- floods_state_group %>% count(state.x)
+```
+
+```{r}
+#Disasters by state by year -- how have they changed?
+year_dis_state_group <- disasters %>% 
+  filter(!grepl("COVID", declarationTitle)) %>% 
+  count(clean_year, disasterNumber, state.x) 
+
+state_dis_by_year <- year_dis_state_group %>% 
+  count(clean_year, state.x)
+```
+
+```{r}
+#Same as above but just for flood events
+year_flood_state_group <- disasters %>% 
+  filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>%
+  count(clean_year, disasterNumber, state.x)
+
+state_floods_by_year <- year_flood_state_group %>% 
+  count(clean_year, state.x)
+
+#Check -- add up all the floods per state and see if it matches the first sheet made with the total -- looks right
+state_floods_by_year %>% 
+  group_by(state.x) %>% 
+  summarise(total_floods = sum(n))
+```
+
+```{r}
+#MS Basin floods:
+basin_floods_by_year <- state_floods_by_year %>% 
+  filter(state.x == "LA" | state.x == "AR" | state.x == "MO" | state.x == "MS" | state.x == "TN" | state.x == "KY" | state.x == "MN" | state.x == "MN" | state.x == "WI" | state.x == "IA" | state.x == "IL") %>% 
+  group_by(clean_year) %>% 
+  summarise(num_floods = sum(n))
+```
+
+
+```{r}
+#Flood events by year for ALL states?
+us_year_dis_group <- disasters %>% 
+  filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>% 
+  count(clean_year, disasterNumber)
+
+floods_by_year_usa <- us_year_dis_group %>% count(clean_year)
+```
+
+
+```{r}
+#Write CSVs to make graphs in Tableau
+write_csv(county_floods, "~/Documents/Ag & Water/Disaster Declarations/county_floods.csv")
+write_csv(flood_events, "~/Documents/Ag & Water/Disaster Declarations/flood_events.csv")
+
+write_csv(state_dis_by_year, "~/Documents/Ag & Water/Disaster Declarations/state_dis_by_year.csv")
+write_csv(state_floods_by_year, "~/Documents/Ag & Water/Disaster Declarations/state_floods_by_year.csv")
+
+write_csv(floods_by_year_usa, "~/Documents/Ag & Water/Disaster Declarations/floods_by_year_usa.csv")
+write_csv(floods_by_county_per_year, "~/Documents/Ag & Water/Disaster Declarations/floods_by_county_per_year.csv")
+write_csv(basin_floods_by_year, "~/Documents/Ag & Water/Disaster Declarations/basin_floods_by_year.csv")
+
+```
+
+```{r}
+#Check 2005
+disasters %>% filter(clean_year == 2005) %>% 
+   filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>% count(state.x)
+
+#every state had flooding in 2005
+
+disasters %>% filter(clean_year == 2005) %>% 
+   filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>% 
+  filter(state.x == "DE")
+
+#Could it all be bc Katrina?
+
+disasters %>% 
+  filter(clean_year == 2005) %>% 
+   filter(incidentType == "Flood" | incidentType == "Coastal Storm" | incidentType == "Dam/Levee Break" | incidentType == "Hurricane" | incidentType == "Mud/Landslide" | incidentType == "Severe Storm(s)") %>% 
+  filter(county_name == "Butte County" & state.x == "ID")
+
+#Why is Wyoming and Vermont missing?
+disasters %>% 
+  filter(state.x == "VT") %>% 
+  filter(clean_year == 2005)
+```
+
+
