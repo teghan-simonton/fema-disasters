@@ -5,3 +5,6 @@ This project was a freelance piece published in the Courier-Journal in conjuncti
 
 Data was taken from Open FEMA Datasets; Disaster Declaration Summaries: https://www.fema.gov/openfema-data-page/disaster-declarations-summaries-v2
 
+I also used a previously created CSV logging all U.S. counties and their FIPS codes to join to the FEMA data, to more easily identify the location of certain flood disaster events. 
+
+The RMD file in this repository includes integrity checks 
